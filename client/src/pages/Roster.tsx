@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import CrewCard from "@/components/CrewCard";
 import FormationSelector from "@/components/FormationSelector";
 import { Input } from "@/components/ui/input";
@@ -10,48 +11,131 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Search, Save } from "lucide-react";
+import { Search, Save, RefreshCw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { Skeleton } from "@/components/ui/skeleton";
+import { config } from "@/lib/config";
+
+// Player profile ID from config (can be overridden via environment variable)
+const PLAYER_PROFILE_ID = config.playerProfileId;
+
+interface CrewMember {
+  dasID: string;
+  name: string;
+  faction: string;
+  species: string;
+  rarity: "Common" | "Uncommon" | "Rare" | "Epic" | "Legendary";
+  imageUrl?: string;
+  openness: number;
+  conscientiousness: number;
+  extraversion: number;
+  agreeableness: number;
+  neuroticism: number;
+  defense: number;
+  attack: number;
+  stamina: number;
+}
 
 export default function Roster() {
   const [selectedFormation, setSelectedFormation] = useState("442");
   const [searchQuery, setSearchQuery] = useState("");
   const [positionFilter, setPositionFilter] = useState("all");
+  const [selectedCrew, setSelectedCrew] = useState<Set<string>>(new Set());
   const { toast } = useToast();
 
-  // TODO: remove mock functionality - Replace with real Star Atlas crew data from API
-  const mockCrew = [
-    { dasID: "1", name: "Nova Striker", image: "https://images.unsplash.com/photo-1534126511673-b6899657816a?w=400&h=600&fit=crop", rarity: "Legendary" as const, position: "FWD" as const, number: 9, stats: { defense: 45, attack: 95, stamina: 78 }, isStarting: true },
-    { dasID: "2", name: "Galaxy Keeper", image: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=400&h=600&fit=crop", rarity: "Epic" as const, position: "GK" as const, number: 1, stats: { defense: 88, attack: 35, stamina: 82 }, isStarting: true },
-    { dasID: "3", name: "Cosmic Guardian", image: "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=400&h=600&fit=crop", rarity: "Epic" as const, position: "DEF" as const, number: 4, stats: { defense: 92, attack: 58, stamina: 85 }, isStarting: true },
-    { dasID: "4", name: "Stellar Playmaker", image: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&h=600&fit=crop", rarity: "Rare" as const, position: "MID" as const, number: 8, stats: { defense: 68, attack: 75, stamina: 88 }, isStarting: true },
-    { dasID: "5", name: "Void Defender", image: "https://images.unsplash.com/photo-1492562080023-ab3db95bfbce?w=400&h=600&fit=crop", rarity: "Rare" as const, position: "DEF" as const, number: 5, stats: { defense: 87, attack: 52, stamina: 80 }, isStarting: true },
-    { dasID: "6", name: "Pulsar Winger", image: "https://images.unsplash.com/photo-1531427186611-ecfd6d936c79?w=400&h=600&fit=crop", rarity: "Uncommon" as const, position: "MID" as const, stats: { defense: 60, attack: 72, stamina: 85 } },
-    { dasID: "7", name: "Orion Forward", image: "https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=400&h=600&fit=crop", rarity: "Uncommon" as const, position: "FWD" as const, stats: { defense: 42, attack: 82, stamina: 76 } },
-    { dasID: "8", name: "Nebula Midfielder", image: "https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=400&h=600&fit=crop", rarity: "Common" as const, position: "MID" as const, stats: { defense: 65, attack: 68, stamina: 82 } },
-  ];
+  // Fetch crew data from Star Atlas API
+  const { data: crewData, isLoading, refetch, isFetching } = useQuery<{ total: number; crew: CrewMember[]; profileId: string }>({
+    queryKey: ["/api/crew", { profileId: PLAYER_PROFILE_ID }],
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+  });
 
-  const filteredCrew = mockCrew.filter(crew => {
-    const matchesSearch = crew.name.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesPosition = positionFilter === "all" || crew.position === positionFilter;
+  const crew = crewData?.crew || [];
+
+  // Assign positions based on personality traits
+  const getPosition = (member: CrewMember): "GK" | "DEF" | "MID" | "FWD" => {
+    // Goalkeeper: High conscientiousness, low neuroticism
+    if (member.conscientiousness > 0.7 && member.neuroticism < 0.3) {
+      return "GK";
+    }
+    // Defender: High conscientiousness and agreeableness
+    if (member.conscientiousness > 0.6 && member.agreeableness > 0.5) {
+      return "DEF";
+    }
+    // Forward: High extraversion and openness
+    if (member.extraversion > 0.6 && member.openness > 0.5) {
+      return "FWD";
+    }
+    // Midfielder: Default
+    return "MID";
+  };
+
+  const enrichedCrew = crew.map((member, index) => ({
+    ...member,
+    position: getPosition(member),
+    number: index + 1,
+    isStarting: index < 11, // First 11 are starting
+  }));
+
+  const filteredCrew = enrichedCrew.filter(member => {
+    const matchesSearch = member.name.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesPosition = positionFilter === "all" || member.position === positionFilter;
     return matchesSearch && matchesPosition;
   });
 
   const handleSaveTeam = () => {
     console.log("Saving team with formation:", selectedFormation);
+    console.log("Selected crew:", Array.from(selectedCrew));
     toast({
       title: "Team Saved",
       description: "Your squad and formation have been updated successfully.",
     });
   };
 
+  const handleRefresh = () => {
+    refetch();
+    toast({
+      title: "Refreshing Crew",
+      description: "Fetching latest data from Star Atlas...",
+    });
+  };
+
+  if (isLoading) {
+    return (
+      <div className="space-y-8">
+        <div>
+          <h1 className="font-heading font-bold text-4xl mb-2">Roster</h1>
+          <p className="text-muted-foreground">Loading Star Atlas crew data...</p>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+          {Array.from({ length: 10 }).map((_, i) => (
+            <div key={i} className="space-y-2">
+              <Skeleton className="aspect-[3/4] w-full" />
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="font-heading font-bold text-4xl mb-2" data-testid="text-page-title">Roster</h1>
-        <p className="text-muted-foreground" data-testid="text-page-subtitle">
-          Build your ultimate Star Atlas crew team
-        </p>
+      <div className="flex items-start justify-between flex-wrap gap-4">
+        <div>
+          <h1 className="font-heading font-bold text-4xl mb-2" data-testid="text-page-title">Roster</h1>
+          <p className="text-muted-foreground" data-testid="text-page-subtitle">
+            {crew.length} Star Atlas crew members from profile {PLAYER_PROFILE_ID.slice(0, 8)}...
+          </p>
+        </div>
+        <Button 
+          onClick={handleRefresh} 
+          variant="outline" 
+          disabled={isFetching}
+          data-testid="button-refresh"
+        >
+          <RefreshCw className={`mr-2 h-4 w-4 ${isFetching ? 'animate-spin' : ''}`} />
+          Refresh from API
+        </Button>
       </div>
 
       <div>
@@ -95,16 +179,35 @@ export default function Roster() {
 
       <div>
         <h3 className="font-heading font-semibold text-lg mb-4 text-muted-foreground" data-testid="text-starting-xi">
-          Starting XI (First 5 shown)
+          Starting XI
         </h3>
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
           {filteredCrew
-            .filter(crew => crew.isStarting)
-            .map((crew) => (
+            .filter(member => member.isStarting)
+            .map((member) => (
               <CrewCard
-                key={crew.dasID}
-                {...crew}
-                onSelect={() => console.log('Selected:', crew.name)}
+                key={member.dasID}
+                dasID={member.dasID}
+                name={member.name}
+                image={member.imageUrl || `https://images.unsplash.com/photo-1534126511673-b6899657816a?w=400&h=600&fit=crop`}
+                rarity={member.rarity}
+                position={member.position}
+                number={member.number}
+                stats={{
+                  defense: member.defense,
+                  attack: member.attack,
+                  stamina: member.stamina,
+                }}
+                isStarting
+                onSelect={() => {
+                  const newSelected = new Set(selectedCrew);
+                  if (newSelected.has(member.dasID)) {
+                    newSelected.delete(member.dasID);
+                  } else {
+                    newSelected.add(member.dasID);
+                  }
+                  setSelectedCrew(newSelected);
+                }}
               />
             ))}
         </div>
@@ -112,16 +215,33 @@ export default function Roster() {
 
       <div>
         <h3 className="font-heading font-semibold text-lg mb-4 text-muted-foreground" data-testid="text-available">
-          Available Crew
+          Available Crew ({filteredCrew.filter(m => !m.isStarting).length})
         </h3>
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
           {filteredCrew
-            .filter(crew => !crew.isStarting)
-            .map((crew) => (
+            .filter(member => !member.isStarting)
+            .map((member) => (
               <CrewCard
-                key={crew.dasID}
-                {...crew}
-                onSelect={() => console.log('Selected:', crew.name)}
+                key={member.dasID}
+                dasID={member.dasID}
+                name={member.name}
+                image={member.imageUrl || `https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=400&h=600&fit=crop`}
+                rarity={member.rarity}
+                position={member.position}
+                stats={{
+                  defense: member.defense,
+                  attack: member.attack,
+                  stamina: member.stamina,
+                }}
+                onSelect={() => {
+                  const newSelected = new Set(selectedCrew);
+                  if (newSelected.has(member.dasID)) {
+                    newSelected.delete(member.dasID);
+                  } else {
+                    newSelected.add(member.dasID);
+                  }
+                  setSelectedCrew(newSelected);
+                }}
               />
             ))}
         </div>
