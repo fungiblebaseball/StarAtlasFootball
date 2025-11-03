@@ -45,7 +45,7 @@ export default function Roster() {
 
   // Fetch crew data from Star Atlas API
   const { data: crewData, isLoading, refetch, isFetching } = useQuery<{ total: number; crew: CrewMember[]; profileId: string }>({
-    queryKey: ["/api/crew", { profileId: PLAYER_PROFILE_ID }],
+    queryKey: [`/api/crew?profileId=${PLAYER_PROFILE_ID}`],
     refetchOnMount: false,
     refetchOnWindowFocus: false,
   });
