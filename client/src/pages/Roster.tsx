@@ -1,5 +1,3 @@
-"use client"
-
 import { useState, useEffect } from "react"
 import {
   DndContext,
@@ -11,11 +9,11 @@ import {
   useSensors,
 } from "@dnd-kit/core"
 import { SortableContext, rectSortingStrategy } from "@dnd-kit/sortable"
-import { CrewCard, CompactCrewCard } from "@/components/crew-card"
+import { CrewCard, CompactCrewCard } from "./components/crew-card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import Link from "next/link"
+import { Link } from "wouter"
 import { Save, Loader2, Filter } from "lucide-react"
 
 interface ApiCrewMember {
