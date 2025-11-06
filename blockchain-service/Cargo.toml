@@ -20,7 +20,8 @@ solana-client = "1.18"
 solana-sdk = "1.18"
 
 # Star Atlas - using git repository
-star-frame = { git = "https://github.com/staratlasmeta/star_frame.git" }
+# TODO: Re-enable when implementing direct blockchain calls
+# star-frame = { git = "https://github.com/staratlasmeta/star_frame.git" }
 
 # HTTP client for API fallback
 reqwest = { version = "0.11", features = ["json"] }
