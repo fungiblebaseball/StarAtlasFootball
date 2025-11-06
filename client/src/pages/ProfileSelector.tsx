@@ -71,10 +71,25 @@ export default function ProfileSelector() {
       queryClient.invalidateQueries({ queryKey: ["/api/profile"] });
       queryClient.invalidateQueries({ queryKey: ["/api/crew"] });
       
-      toast({
-        title: "Profile synced successfully",
-        description: data.message || `Synced ${data.selectedCrew || 0} crew members`,
-      });
+      // Show different notification based on crew changes
+      // replacedCount is always present from backend response
+      if (data.replacedCount !== undefined && data.replacedCount > 0) {
+        toast({
+          title: "Team composition changed",
+          description: `${data.replacedCount} player${data.replacedCount > 1 ? 's' : ''} ${data.replacedCount > 1 ? 'are' : 'is'} no longer available and ${data.replacedCount > 1 ? 'have' : 'has'} been replaced. Check your roster page to review your new lineup.`,
+        });
+      } else if (data.replacedCount !== undefined && data.replacedCount === 0) {
+        toast({
+          title: "Profile synced successfully",
+          description: data.message || `Your team is ready with ${data.crewCount || 15} crew members`,
+        });
+      } else {
+        // Fallback for unexpected response format
+        toast({
+          title: "Profile synced",
+          description: data.message || "Your profile has been synced",
+        });
+      }
       
       setLocation("/dashboard");
     },
