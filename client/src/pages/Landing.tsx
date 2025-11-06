@@ -1,23 +1,24 @@
-import { useState } from "react";
+import { useEffect } from "react";
 import { useLocation } from "wouter";
-import WalletConnectButton from "@/components/WalletConnectButton";
+import { useWallet } from "@/lib/wallet-context";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Users, Trophy, Coins } from "lucide-react";
+import { Users, Trophy, Coins, Wallet, LogOut } from "lucide-react";
 import heroImage from "@assets/generated_images/Futuristic_football_stadium_cosmic_background_61145702.png";
 
 export default function Landing() {
   const [, setLocation] = useLocation();
-  const [connecting, setConnecting] = useState(false);
+  const { connected, walletAddress, connecting, connect, disconnect, walletType } = useWallet();
 
-  const handleConnect = () => {
-    setConnecting(true);
-    console.log("Connecting to Phantom wallet...");
-    // TODO: remove mock functionality - Simulate wallet connection
-    setTimeout(() => {
-      setConnecting(false);
-      console.log("Wallet connected!");
+  // Redirect to dashboard when wallet is connected
+  useEffect(() => {
+    if (connected && walletAddress) {
       setLocation("/dashboard");
-    }, 1500);
+    }
+  }, [connected, walletAddress, setLocation]);
+
+  const truncateAddress = (address: string) => {
+    return `${address.slice(0, 4)}...${address.slice(-4)}`;
   };
 
   return (
@@ -41,12 +42,38 @@ export default function Landing() {
           </p>
           
           {connecting ? (
-            <div className="flex items-center justify-center gap-2 text-white">
+            <div className="flex items-center justify-center gap-2 text-white" data-testid="text-connecting">
               <div className="h-5 w-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-              <span>Connecting wallet...</span>
+              <span>Connecting to {walletType || 'wallet'}...</span>
+            </div>
+          ) : connected ? (
+            <div className="flex flex-col items-center gap-4">
+              <div className="flex items-center gap-3 bg-white/10 backdrop-blur-md px-6 py-3 rounded-full text-white" data-testid="text-wallet-connected">
+                <Wallet className="h-5 w-5" />
+                <span className="font-medium">{truncateAddress(walletAddress!)}</span>
+                <span className="text-xs text-white/60 capitalize">({walletType})</span>
+              </div>
+              <Button
+                size="lg"
+                variant="outline"
+                onClick={disconnect}
+                className="border-white/30 text-white hover:bg-white/20 backdrop-blur-md"
+                data-testid="button-disconnect"
+              >
+                <LogOut className="mr-2 h-5 w-5" />
+                Disconnect
+              </Button>
             </div>
           ) : (
-            <WalletConnectButton onConnect={handleConnect} />
+            <Button
+              size="lg"
+              onClick={connect}
+              className="h-14 px-8 font-heading text-base"
+              data-testid="button-wallet-connect"
+            >
+              <Wallet className="mr-2 h-5 w-5" />
+              Connect Phantom / Solflare
+            </Button>
           )}
         </div>
       </div>

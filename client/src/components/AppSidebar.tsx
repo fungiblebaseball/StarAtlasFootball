@@ -1,5 +1,7 @@
-import { Home, Users, Calendar, Trophy, ShoppingBag, User, Wallet } from "lucide-react";
+import { Home, Users, Calendar, Trophy, ShoppingBag, Wallet, LogOut } from "lucide-react";
 import { Link, useLocation } from "wouter";
+import { useWallet } from "@/lib/wallet-context";
+import { Button } from "@/components/ui/button";
 import {
   Sidebar,
   SidebarContent,
@@ -23,6 +25,11 @@ const menuItems = [
 
 export function AppSidebar() {
   const [location] = useLocation();
+  const { connected, walletAddress, disconnect, walletType } = useWallet();
+
+  const truncateAddress = (address: string) => {
+    return `${address.slice(0, 6)}...${address.slice(-4)}`;
+  };
 
   return (
     <Sidebar>
@@ -51,18 +58,48 @@ export function AppSidebar() {
         </SidebarGroup>
       </SidebarContent>
 
-      <SidebarFooter className="p-4">
-        <Card className="p-3">
-          <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-full bg-primary/20 flex items-center justify-center">
-              <Wallet className="h-5 w-5 text-primary" />
+      <SidebarFooter className="p-4 space-y-3">
+        {connected && walletAddress ? (
+          <>
+            <Card className="p-3">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-full bg-primary/20 flex items-center justify-center">
+                  <Wallet className="h-5 w-5 text-primary" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium truncate" data-testid="text-wallet">
+                    {truncateAddress(walletAddress)}
+                  </div>
+                  <div className="text-xs text-muted-foreground capitalize" data-testid="text-connected">
+                    {walletType} wallet
+                  </div>
+                </div>
+              </div>
+            </Card>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={disconnect}
+              className="w-full"
+              data-testid="button-sidebar-disconnect"
+            >
+              <LogOut className="mr-2 h-4 w-4" />
+              Disconnect
+            </Button>
+          </>
+        ) : (
+          <Card className="p-3">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
+                <Wallet className="h-5 w-5 text-muted-foreground" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-medium" data-testid="text-wallet">Not connected</div>
+                <div className="text-xs text-muted-foreground">Connect wallet</div>
+              </div>
             </div>
-            <div className="flex-1 min-w-0">
-              <div className="text-sm font-medium truncate" data-testid="text-wallet">7nK8...d9E0</div>
-              <div className="text-xs text-muted-foreground" data-testid="text-connected">Connected</div>
-            </div>
-          </div>
-        </Card>
+          </Card>
+        )}
       </SidebarFooter>
     </Sidebar>
   );

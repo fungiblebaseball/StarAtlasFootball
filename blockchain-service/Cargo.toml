@@ -1,0 +1,33 @@
+[package]
+name = "star-atlas-blockchain-service"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# Web framework
+actix-web = "4"
+actix-cors = "0.7"
+
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Solana
+solana-client = "1.18"
+solana-sdk = "1.18"
+
+# Star Atlas - using git repository
+star-frame = { git = "https://github.com/staratlasmeta/star_frame.git" }
+
+# HTTP client for API fallback
+reqwest = { version = "0.11", features = ["json"] }
+
+# Error handling
+anyhow = "1"
+
+# Logging
+env_logger = "0.11"
+log = "0.4"
