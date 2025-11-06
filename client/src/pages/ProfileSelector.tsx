@@ -174,10 +174,10 @@ export default function ProfileSelector() {
                     </div>
                     <div>
                       <div className="font-semibold" data-testid={`text-profile-name-${profile.pubkey}`}>
-                        {profile.name || "Unnamed Profile"}
-                      </div>
-                      <div className="text-sm text-muted-foreground font-mono" data-testid={`text-pubkey-${profile.pubkey}`}>
-                        {profile.pubkey.slice(0, 12)}...{profile.pubkey.slice(-12)}
+                        {profile.name || "Unnamed Profile"}{" "}
+                        <span className="text-sm text-muted-foreground font-mono font-normal">
+                          ({profile.pubkey.slice(0, 12)}...{profile.pubkey.slice(-12)})
+                        </span>
                       </div>
                     </div>
                   </div>
