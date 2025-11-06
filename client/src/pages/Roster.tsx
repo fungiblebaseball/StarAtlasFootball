@@ -138,8 +138,11 @@ export default function RosterPage() {
     const selectedIds = (profile.selectedCrewIds as string[]) || []
     
     if (selectedIds.length > 0) {
-      // Use profile's selected crew
-      const selected = players.filter((p: Player) => selectedIds.includes(p.id))
+      // Use profile's selected crew - preserve order from selectedIds
+      const selected = selectedIds
+        .map((id: string) => players.find((p: Player) => p.id === id))
+        .filter((p): p is Player => p !== undefined) // Filter out undefined and provide type guard
+      
       const available = players.filter((p: Player) => !selectedIds.includes(p.id))
       setSelectedPlayers(selected)
       setAvailablePlayers(available)

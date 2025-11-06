@@ -69,7 +69,7 @@ export default function ProfileSelector() {
     },
     onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/profile"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/crew"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/crew/cached"] });
       
       // Show different notification based on crew changes
       // replacedCount is always present from backend response
