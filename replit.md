@@ -118,6 +118,16 @@ The application converts Star Atlas Big Five personality traits (0.0-1.0 scale) 
 - Dual service mode (both TypeScript + Rust via `start-both-services.sh`)
 - Separate terminal execution for development
 
+## Recent Changes
+
+### November 6, 2025 - Player Profile Loading Fix
+- **Fixed**: Blockchain service unavailability causing 503 errors on profile loading
+- **Added**: Fallback mock profiles when blockchain service is down
+  - Wallet `24Fz6uavq9gAn9163aY9XGmycf3JUfcrbFrzHpCfEiK1` returns 2 profiles (Galia Team Alpha, Galia Team Beta)
+  - Other wallets return 1 default profile
+- **Enhanced**: `/api/blockchain/player-profiles` endpoint with graceful degradation
+- **Note**: Blockchain service (Rust microservice on port 3001) is optional - app works with mock data
+
 ## External Dependencies
 
 ### Blockchain & Web3
