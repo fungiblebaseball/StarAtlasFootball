@@ -1,0 +1,452 @@
+Ecco la versione definitiva, sistemata e organizzata:
+
+---
+
+# PROMPT COMPLETA PER REPLIT AGENT - STAR ATLAS RACING APP
+
+## DOCUMENTAZIONE DI RIFERIMENTO
+Usa e studia la seguente documentazione:
+- https://github.com/staratlasmeta/star_frame
+- https://docs.rs/star_frame/latest/star_frame/
+
+---
+
+## CONTESTO GENERALE APPLICAZIONE
+App TypeScript per gare tra utenti di Star Atlas con:
+- Database PostgreSQL locale
+- Autenticazione wallet-based (Phantom/Solflare)
+- Pagamenti in ATLAS tokens su Solana
+- Microservizio Rust separato per blockchain
+- Design responsive con tema chiaro/scuro
+
+---
+
+## 1. INTEGRAZIONE STAR-FRAME E GESTIONE CREW LIST
+
+### Obiettivo
+Integrare star-frame (framework Rust opensource per Star Atlas) nell'applicazione esistente per gestire il download della crew list nel player profile Star Atlas dell'utente, ricavato dal wallet address connesso web3.0 alla blockchain Solana, mantenendo il codice pulito e modulare.
+
+### Flusso Login e Selezione Player Profile
+**Al momento del login:**
+1. Il bottone "Connect" deve integrare definitivamente la connessione del wallet funzionante con Phantom o Solflare
+2. Dopo la connessione, appare un messaggio dove si chiede di scegliere quale tra i player profiles esistenti che corrispondono al wallet
+3. Per scaricare la lista dei player profiles usa Star-Frame
+4. **PROVVISORIAMENTE**: aggiungi anche un bottone ausiliario per procedere con il player profile predefinito come ora per test interni
+
+### Funzionalità da Implementare
+
+**All'accesso (primo login):**
+1. L'app TypeScript chiama Star-frame
+2. Il microservizio Rust usa star-frame per scaricare la lista completa dalla blockchain
+3. Restituisce JSON con tutti i giocatori
+4. TypeScript salva i primi 15 nel database locale come Team predefinito
+
+**Ai login successivi:**
+1. Scarica nuovamente lista completa via microservizio Rust
+2. Verifica quali dei 15 giocatori salvati sono ancora presenti
+3. Sostituisce i giocatori mancanti con giocatori casuali dalla posizione 16+
+4. Mostra notifica: "La tua formazione è cambiata: X giocatori non sono più disponibili e sono stati sostituiti, controlla la pagina roster"
+
+### Architettura Proposta
+(Suggerisci miglioramenti se necessario considerando la natura e la struttura del progetto)
+
+Crea un **microservizio Rust separato** che:
+- Espone un endpoint HTTP REST (es. `GET /api/crew/:playerProfilePubkey`)
+- Usa star-frame internamente per comunicare con la blockchain Solana
+- Restituisce la crew list in formato JSON
+- Viene deployato come processo separato che gira in background
+
+Il codice TypeScript esistente chiamerà semplicemente questo endpoint HTTP locale, mantenendo separazione totale tra:
+- **Layer TypeScript**: logica business, database, UI
+- **Layer Rust**: comunicazione blockchain via star-frame
+
+### Struttura File
+```
+/
+├── src/                    # Codice TypeScript esistente (NON MODIFICARE)
+├── blockchain-service/     # Nuovo microservizio Rust
+│   ├── Cargo.toml
+│   ├── src/
+│   │   └── main.rs        # Server HTTP + integrazione star-frame
+├── package.json           # Aggiungi solo script per avviare entrambi i servizi
+└── .replit                # Config per avviare entrambi i processi
+```
+
+### Requisiti Tecnici
+- Se necessario: Microservizio Rust su porta locale (es. 3001)
+- Formato risposta JSON: `{ "players": [...] }`
+- Gestione errori con status code HTTP appropriati
+- Logging chiaro per debug
+- Nessuna modifica al codice TypeScript esistente (solo aggiungi chiamata HTTP)
+
+### Dipendenze Rust (Cargo.toml)
+```toml
+[dependencies]
+star-frame = { git = "https://github.com/staratlasmeta/star_frame.git" }
+actix-web = "4"
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+solana-client = "1.18"
+solana-sdk = "1.18"
+```
+
+### Obiettivo
+Integrazione pulita, modulare e scalabile che mantenga separati i concern: TypeScript per business logic, Rust solo per blockchain via star-frame.
+
+**NOTA**: Se star-frame non espone direttamente funzioni per crew list, analizza il repository per trovare i metodi corretti o considera alternative come usare i Program ID di Star Atlas direttamente.
+
+---
+
+## 2. PAGINA TEAM
+
+### Requisiti Generali
+- Includila nel link menu
+- Visualizza i perks attivi accanto al bottone per il modulo (i perks devono continuare ad essere acquistabili nella loro pagina)
+
+### Selettore Modulo di Gioco
+Stabilisci un bottone o switch a tre stati per selezionare il tipo di tattiche impostate:
+- **4-4-2**: 4 difensori, 4 mediani, 2 attaccanti
+- **4-3-3**: 4 difensori, 3 mediani, 3 attaccanti
+- **3-4-3**: 3 difensori, 4 mediani, 3 attaccanti
+
+### Sistema di Colorazione Giocatori
+Il colore dei giocatori nella lista deve cambiare in funzione del modulo di gioco.
+
+**Esempio con modulo 3-4-3:**
+- **Num 1**: Bianco (Portiere)
+- **Num 2-4**: Giallo (Difesa)
+- **Num 5-6-7-8**: Rosso (Mediani)
+- **Num 9-10-11**: Blu (Attacco)
+- **Num 12-15**: Viola (Riserve)
+
+I colori vengono assegnati ai comparti della squadra per semplicità, di conseguenza cambiano a seconda del modulo selezionato.
+
+---
+
+## 3. PAGINA ROSTER
+
+### Bug Fix
+1. **Filtro attributi**: Ci sono alcuni bug perché il filtro non mette in ordine coerente gli attributi
+
+### Nuovi Attributi Derivati
+2. Aggiungi altri 2 valori attributo derivati:
+   - **"tot"**: somma di tutti gli attributi
+   - **"average-attributes"**: media degli attributi
+   - **(Fa la stessa cosa per la pagina Team)**
+
+### Visualizzazione Valori Comparto
+3. Nello spazio dove sono i titoli delle sezioni del gruppo dei primi 15 (GoalKeeper, Defence, Midfielders, Attackers) si deve visualizzare il **valore complessivo del comparto**
+   - **Esempio**: `Attackers: 73 + 10% (logo-perks)`
+
+### Layout e Interazione Box
+4. **I box devono essere:**
+   - Quadrati
+   - Disposizione allineata al centro (non giustificati)
+   - Dimensione uguale tra loro
+
+5. **Sistema di scambio posizioni:**
+   - Al sistema di drag and drop voglio aggiungere che **cliccando su un box lo seleziono**
+   - Poi se clicco su un altro box, **inverto le loro posizioni**
+
+### Interazione con Blockchain
+Per ora si accede con Star-Frame per scaricare la crew list nuovamente dopo il login per permettere modifiche al roster.
+
+---
+
+## 4. PAGINA PERKS (MARKETPLACE)
+
+### Contesto
+App TypeScript esistente per gare Star Atlas dove:
+- Gli utenti acquistano vantaggi (perks) per le proprie gare
+- Pagamento con ATLAS tokens (SPL token su Solana)
+- Codice deve rimanere pulito, modulare e scalabile
+
+### Struttura Perks e Categorie
+
+#### CATEGORIA: OFFENSIVA (3 perks)
+L'utente può acquistare **SOLO 1 perk** per questa categoria.
+- Esempi: "Counter Strike +15%", "Dribbling +15%", "Goal Machine +15%"
+
+#### CATEGORIA: DIFENSIVA (3 perks)
+L'utente può acquistare **SOLO 1 perk** per questa categoria.
+- Esempi: "Man marking", "Zone marking", "Offside trap"
+
+#### CATEGORIA: TEAM BUILDING (6 perks totali, divisi in 2 gruppi da 3)
+
+**Gruppo A: Team Morale (3 perks - soggetti ironici)**
+L'utente può acquistare **MASSIMO 1 perk** da questo gruppo.
+- "Caffè Spaziale Premium" (Morale +20%)
+- "Playlist Motivazionale Galattica" (Morale +15%)
+- "Venerdì Casual in Astronave" (Morale +25%)
+
+**Gruppo B: Team Training (3 perks - soggetti ironici)**
+L'utente può acquistare **MASSIMO 1 perk** da questo gruppo.
+- "Simulatore di Emergenze Assurde" (Training +20%)
+- "Corso 'Come Non Premere Quel Bottone'" (Training +15%)
+- "Team Building con Asteroidi Veri" (Training +30%)
+
+**TOTALE: 12 perks disponibili**
+
+### Regole di Acquisto
+- **Offensiva**: max 1 perk selezionabile
+- **Difensiva**: max 1 perk selezionabile
+- **Team Morale**: max 1 perk selezionabile
+- **Team Training**: max 1 perk selezionabile
+- **MASSIMO TOTALE**: 4 perks attivi contemporaneamente (1+1+1+1)
+
+### UI/UX Acquisto
+- Mostra tutti i perks nella stessa pagina, raggruppati per categoria
+- Indica visivamente quali perks sono già attivi/acquistati
+- Disabilita la selezione di altri perks nella stessa categoria se uno è già attivo
+- Permetti selezione multipla di perks da categorie diverse prima dell'acquisto
+- Bottone "Acquista Selezione" per comprare tutti i perks selezionati in **una singola transazione blockchain**
+
+### Integrazione Blockchain Solana
+
+**Flusso di acquisto:**
+1. Utente seleziona 1+ perks da categorie diverse
+2. App calcola costo totale in ATLAS tokens
+3. Clic su "Acquista" genera transazione Solana
+4. Utente approva transazione nel wallet (Phantom/Solflare)
+5. Dopo conferma blockchain, perks diventano attivi nel database
+6. Se transazione fallisce, nessun perk viene attivato
+
+**Requisiti tecnici blockchain:**
+- Usa `@solana/web3.js` per creare transazione
+- Usa `@solana/spl-token` per trasferimento ATLAS tokens
+- ATLAS token mint address: `ATLASXmbPQxBUYbxPsV97usA3fPQYEqzQBUHgiFCUsXx`
+- Wallet address destinazione: configurabile da file admin
+- Gestisci errori: wallet non connesso, fondi insufficienti, transazione rifiutata
+
+### File Configurazione Admin
+
+Crea `config/perks-pricing.json`:
+```json
+{
+  "walletDestination": "ADMIN_WALLET_ADDRESS_HERE",
+  "perks": {
+    "offensive": [
+      { "id": "off_1", "name": "Attacco Critico", "priceAtlas": 100 },
+      { "id": "off_2", "name": "Velocità Fuoco", "priceAtlas": 150 },
+      { "id": "off_3", "name": "Danno Armi", "priceAtlas": 200 }
+    ],
+    "defensive": [
+      { "id": "def_1", "name": "Scudi Rinforzati", "priceAtlas": 120 },
+      { "id": "def_2", "name": "Evasione", "priceAtlas": 140 },
+      { "id": "def_3", "name": "Resistenza Hull", "priceAtlas": 180 }
+    ],
+    "teamMorale": [
+      { "id": "morale_1", "name": "Caffè Spaziale Premium", "priceAtlas": 80, "effect": "+20% Morale" },
+      { "id": "morale_2", "name": "Playlist Motivazionale", "priceAtlas": 90, "effect": "+15% Morale" },
+      { "id": "morale_3", "name": "Venerdì Casual", "priceAtlas": 100, "effect": "+25% Morale" }
+    ],
+    "teamTraining": [
+      { "id": "train_1", "name": "Simulatore Emergenze Assurde", "priceAtlas": 110, "effect": "+20% Training" },
+      { "id": "train_2", "name": "Corso Bottone Rosso", "priceAtlas": 95, "effect": "+15% Training" },
+      { "id": "train_3", "name": "Team Building Asteroidi", "priceAtlas": 130, "effect": "+30% Training" }
+    ]
+  }
+}
+```
+
+Admin può modificare questo file per cambiare prezzi e wallet destinazione.
+
+### Struttura File
+```
+/
+├── src/
+│   ├── pages/
+│   │   └── Perks.tsx              # Pagina marketplace reimplementata
+│   ├── components/
+│   │   ├── PerkCard.tsx           # Card singolo perk
+│   │   └── PerkCategory.tsx       # Sezione categoria
+│   ├── services/
+│   │   ├── solana.service.ts      # Gestione wallet e transazioni
+│   │   └── perks.service.ts       # Logica business perks
+│   └── config/
+│       └── perks-pricing.json     # Configurazione admin
+```
+
+### Requisiti UI
+- Animazioni per selezione/acquisto
+- Indicatore visivo: "Perk attivo", "Selezionato", "Non disponibile"
+- Loading state durante transazione blockchain
+- Toast notifications per successo/errore
+- Mostra saldo ATLAS dell'utente
+- Conferma prima di procedere con transazione
+
+### Database
+Salva nel database locale:
+- Quali perks sono attivi per ogni utente
+- Timestamp acquisto
+- Transaction signature Solana (per verifica)
+
+### Obiettivo
+Marketplace pulito, intuitivo e funzionale con integrazione blockchain Solana per pagamenti in ATLAS tokens, rispettando le regole di selezione per categoria.
+
+---
+
+## 5. SEZIONE MATCH E AMMINISTRAZIONE
+
+### Obiettivo Principale
+Riprogettare sezione Match con griglia elegante non tabellare, navigabile verso pagine Evento e Gara. Creare pagina amministrazione separata con accesso wallet + whitelist.
+
+### Contesto
+- App TypeScript con PostgreSQL
+- Microservizio Rust per crew list presente
+- Autenticazione wallet-based
+
+### PAGINA MATCH (Calendario Girone) – /match
+
+**Layout:**
+- Mostra tutti incontri girone in griglia elegante stile card deck
+- Layout responsive: mobile 1 colonna, tablet 2, desktop 3-4
+- Design: `grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6`
+- Card: `rounded-xl shadow-lg p-5`
+
+**Ogni card cliccabile contiene:**
+- Intestazione colorata: "Giornata 3" (badge)
+- Data e ora
+- Team A vs Team B (nomi completi)
+- Risultato o "Da giocare"
+- Stato: badge verde/giallo/grigio
+- Hover/tap: ombra e scala
+
+**Navigazione:**
+- Clic card apre `/matchday/:id`
+- Clic nome team apre `/team/:teamId` (visualizzazione NON modificabile)
+
+### PAGINA EVENTO – /matchday/:id
+
+**Layout:**
+- Scorrimento orizzontale fluido tipo carosello
+- Supporta frecce, swipe touch, drag mouse, trackpad
+- Ogni slide = una giornata
+- Libreria: `embla-carousel-react` o CSS `scroll-snap`
+
+**Contenuto giornata:**
+- Lista verticale gare
+- Per gara: ora, Team A vs B, moduli, icone perks
+- Se completata: pulsante "Vedi Sintesi" → `/match/:matchId`
+- Se in programma: countdown o etichetta
+
+### PAGINA GARA – /match/:matchId
+
+**Layout:**
+- Due colonne (mobile stack verticale)
+- Dati dal database
+
+**Colonna Sinistra:**
+- Team A 2 – 1 Team B
+- Formazione titolare + riserve (griglia)
+- Perks attivi (icone con tooltip)
+
+**Colonna Destra:**
+- Timeline eventi (23' Gol di Rossi)
+- Statistiche: possesso, tiri, falli, corner
+- Marcatori con minuto e assist
+- Commento finale
+
+### PAGINA AMMINISTRAZIONE – /admin
+
+**Percorso:** `/admin`
+
+**Accesso Protetto:**
+- Wallet connection obbligatoria
+- Whitelist wallet in `config/admin-wallets.json`
+- Wallet non in lista → accesso negato
+
+**Config esempio:**
+```json
+{
+  "allowedWallets": [
+    "AdminWallet1...",
+    "AdminWallet2..."
+  ]
+}
+```
+
+**Funzionalità:**
+
+**Sezione "Inizializza Giocatori":**
+- Textarea o CSV con 20 wallet address
+- Bottone "Crea Profili e Team"
+
+**Per ogni wallet:**
+1. Crea `player_profiles`
+2. Chiama `localhost:3001/api/crew/:pubkey`
+3. Estrae 15 casuali (shuffle + slice)
+4. Salva `teams` + `team_players` con formazione base
+5. `is_editable = false` per esterni
+
+**UI:**
+- Log real-time + riassunto finale
+- Minimalista, spinner durante elaborazione
+
+### Requisiti Tecnici
+- **Autenticazione**: `@solana/wallet-adapter-react`
+- **Whitelist**: hook React confronta `publicKey.toBase58()`
+- **Protezione route**: `<PrivateRoute path="/admin" />`
+- **Griglia**: NO table, usa `grid` + card con `hover:scale-105`
+- **Team avversari**: componente `TeamView` con `editable={false}`
+- **Database**: struttura in prompt separata
+- **API**: endpoint `/admin/init-players` (POST array wallet)
+
+### Obiettivo Finale
+- Sezione Match elegante e navigabile
+- Pagine Evento e Gara ricche e responsive
+- Pagina `/admin` sicura con inizializzazione 20 profili + team
+- Accesso solo wallet autorizzati
+- Nessuna modifica team avversari
+- Integrazione con microservizio e PostgreSQL
+
+---
+
+## 6. RACCOMANDAZIONI DESIGN E COMPATIBILITÀ
+
+### Design System Coerente
+- Mantieni consistenza visiva con il resto dell'applicazione (colori, tipografia, spacing, componenti)
+- Rispetta la configurazione tema chiaro/scuro già presente nell'app
+- Usa le stesse classi Tailwind e componenti UI esistenti per uniformità
+
+### Approccio Mobile-First Responsive
+- **NON creare versioni separate** per mobile e desktop
+- Usa un unico codice responsive con breakpoints Tailwind (`sm:`, `md:`, `lg:`, `xl:`)
+- Layout deve adattarsi fluidamente da 320px (mobile) a 1920px+ (desktop)
+- Testa con Chrome DevTools usando device emulation
+
+### Compatibilità Wallet Browser (CRITICO)
+I wallet Solana (Phantom, Solflare, Backpack) usano browser in-app con **viewport non standard** e problemi noti:
+
+- **Altezza viewport instabile**: usa `min-h-screen` invece di `h-screen`
+- **Safe area iOS**: implementa `safe-area-inset` per dispositivi con notch
+- **Zoom accidentale**: `<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">`
+- **Overflow nascosto**: evita scroll orizzontale, usa `overflow-x-hidden`
+- **Bottom navigation bar**: lascia padding bottom `pb-safe` per evitare sovrapposizioni
+- **Touch targets**: minimo 44x44px per bottoni e elementi interattivi
+- **Tastiera mobile**: gestisci correttamente l'apertura keyboard che riduce viewport
+
+### Best Practices
+
+**Esempio viewport safe per wallet browser:**
+```tsx
+<div className="min-h-screen w-full overflow-x-hidden pb-safe">
+  <div className="container mx-auto px-4 sm:px-6 lg:px-8">
+    {/* Contenuto responsive */}
+  </div>
+</div>
+```
+
+### Testing Obbligatorio
+1. Chrome DevTools (mobile emulation)
+2. **Phantom wallet browser** (iOS + Android)
+3. **Solflare wallet browser** (iOS + Android)
+4. Desktop browser standard (Chrome, Firefox, Safari)
+
+### Priorità
+La UI deve funzionare perfettamente nei wallet browser dove avverranno le transazioni, anche se significa sacrificare qualche dettaglio estetico su desktop.
+
+---
+
+**FINE PROMPT COMPLETA**
