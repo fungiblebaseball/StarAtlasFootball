@@ -3,6 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { config } from "./config";
 import { z } from "zod";
+import { checkBlockchainServiceHealth, fetchCrewList, fetchPlayerProfiles } from "./services/blockchain";
 
 // Default player profile ID from config
 const DEFAULT_PROFILE_ID = config.playerProfileId;
@@ -187,27 +188,91 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Sync crew from blockchain
   app.post("/api/profile/sync-crew", async (req, res) => {
     try {
-      const { walletAddress, playerProfilePubkey } = req.body;
+      let { walletAddress, playerProfilePubkey } = req.body;
       
       if (!walletAddress) {
         return res.status(400).json({ error: "Wallet address is required" });
       }
 
-      // TODO: Call Rust blockchain service to fetch crew list
-      // For now, fetch from Star Atlas API directly as fallback
-      const crewUrl = playerProfilePubkey 
-        ? `https://galaxy.staratlas.com/crew/inventory/${playerProfilePubkey}`
-        : `https://galaxy.staratlas.com/crew/inventory/${walletAddress}`;
+      let crewData: any;
+      let validatedData: z.infer<typeof StarAtlasCrewResponse>;
+
+      // Check blockchain service availability (cached)
+      const isBlockchainServiceAvailable = await checkBlockchainServiceHealth();
       
-      console.log(`Syncing crew from: ${crewUrl}`);
-      
-      const response = await fetch(crewUrl);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch crew: ${response.status}`);
+      // If no pubkey provided but blockchain service is available, try to fetch player profiles
+      if (isBlockchainServiceAvailable && !playerProfilePubkey) {
+        try {
+          console.log(`Fetching player profiles from blockchain service for ${walletAddress}`);
+          const profilesResponse = await fetchPlayerProfiles(walletAddress);
+          
+          if (profilesResponse.profiles.length > 0) {
+            // Use first profile pubkey
+            playerProfilePubkey = profilesResponse.profiles[0].pubkey;
+            console.log(`Found player profile pubkey: ${playerProfilePubkey}`);
+          }
+        } catch (profileError) {
+          console.warn(`Failed to fetch player profiles from blockchain service:`, profileError);
+        }
       }
       
-      const data = await response.json();
-      const validatedData = StarAtlasCrewResponse.parse(data);
+      if (isBlockchainServiceAvailable && playerProfilePubkey) {
+        console.log(`Using blockchain service for crew sync`);
+        try {
+          const blockchainResponse = await fetchCrewList(playerProfilePubkey);
+          
+          // Transform blockchain service response to Star Atlas API format with safe defaults
+          validatedData = {
+            total: blockchainResponse.total,
+            crew: blockchainResponse.crew.map(member => ({
+              _id: member.das_id,
+              dasID: member.das_id,
+              mintOffset: member.mint_offset ?? undefined,
+              faction: member.faction || "Unknown",
+              species: member.species || "Unknown",
+              sex: member.sex || "Unknown",
+              name: member.name || "Unknown Crew",
+              university: member.university ?? undefined,
+              age: member.age ?? 25,
+              openness: member.openness,
+              conscientiousness: member.conscientiousness,
+              extraversion: member.extraversion,
+              agreeableness: member.agreeableness,
+              neuroticism: member.neuroticism,
+              rarity: member.rarity || "common",
+              aptitudes: member.aptitudes ?? undefined,
+              appearance: member.appearance ?? undefined,
+              imageUrl: member.image_url ?? undefined,
+              updatedAt: member.updated_at ?? undefined,
+              createdAt: member.created_at ?? undefined,
+            })),
+          };
+        } catch (blockchainError) {
+          console.warn(`Blockchain service failed, falling back to Star Atlas API:`, blockchainError);
+          const crewUrl = `https://galaxy.staratlas.com/crew/inventory/${playerProfilePubkey}`;
+          const response = await fetch(crewUrl);
+          if (!response.ok) {
+            throw new Error(`Failed to fetch crew: ${response.status}`);
+          }
+          crewData = await response.json();
+          validatedData = StarAtlasCrewResponse.parse(crewData);
+        }
+      } else {
+        // Fallback to Star Atlas API
+        const crewUrl = playerProfilePubkey 
+          ? `https://galaxy.staratlas.com/crew/inventory/${playerProfilePubkey}`
+          : `https://galaxy.staratlas.com/crew/inventory/${walletAddress}`;
+        
+        console.log(`Using Star Atlas API fallback: ${crewUrl}`);
+        
+        const response = await fetch(crewUrl);
+        if (!response.ok) {
+          throw new Error(`Failed to fetch crew: ${response.status}`);
+        }
+        
+        crewData = await response.json();
+        validatedData = StarAtlasCrewResponse.parse(crewData);
+      }
       
       // Enrich and cache all crew
       const enrichedCrew = validatedData.crew.map(member => {
