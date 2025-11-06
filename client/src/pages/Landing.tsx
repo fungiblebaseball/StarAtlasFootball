@@ -1,14 +1,16 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { useWallet } from "@/lib/wallet-context";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Users, Trophy, Coins, Wallet, LogOut } from "lucide-react";
+import { Users, Trophy, Coins, Wallet, LogOut, Calendar } from "lucide-react";
+import { WalletSelector } from "@/components/WalletSelector";
 import heroImage from "@assets/generated_images/Futuristic_football_stadium_cosmic_background_61145702.png";
 
 export default function Landing() {
   const [, setLocation] = useLocation();
-  const { connected, walletAddress, connecting, connect, disconnect, walletType } = useWallet();
+  const { connected, walletAddress, disconnect, walletType } = useWallet();
+  const [showWalletSelector, setShowWalletSelector] = useState(false);
 
   // Redirect to profile selector when wallet is connected
   useEffect(() => {
@@ -23,6 +25,48 @@ export default function Landing() {
 
   return (
     <div className="min-h-screen bg-background">
+      {/* Public Navigation Bar */}
+      <nav className="fixed top-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-md border-b">
+        <div className="container mx-auto px-4">
+          <div className="flex items-center justify-between h-16">
+            <div className="flex items-center gap-2">
+              <h1 className="font-heading font-bold text-xl" data-testid="text-nav-title">Galia Football</h1>
+            </div>
+            <div className="flex items-center gap-6">
+              <Button 
+                variant="ghost" 
+                asChild 
+                data-testid="link-nav-matches"
+              >
+                <a href="/matches">
+                  <Calendar className="mr-2 h-4 w-4" />
+                  Matches
+                </a>
+              </Button>
+              <Button 
+                variant="ghost" 
+                asChild 
+                data-testid="link-nav-rankings"
+              >
+                <a href="/rankings">
+                  <Trophy className="mr-2 h-4 w-4" />
+                  Rankings
+                </a>
+              </Button>
+              {!connected && (
+                <Button
+                  onClick={() => setShowWalletSelector(true)}
+                  data-testid="button-nav-connect"
+                >
+                  <Wallet className="mr-2 h-4 w-4" />
+                  Connect
+                </Button>
+              )}
+            </div>
+          </div>
+        </div>
+      </nav>
+
       <div 
         className="relative min-h-screen flex items-center justify-center px-4"
         style={{
@@ -41,12 +85,7 @@ export default function Landing() {
             Build your ultimate Star Atlas crew team, compete in tournaments, and earn rewards on Solana
           </p>
           
-          {connecting ? (
-            <div className="flex items-center justify-center gap-2 text-white" data-testid="text-connecting">
-              <div className="h-5 w-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-              <span>Connecting to {walletType || 'wallet'}...</span>
-            </div>
-          ) : connected ? (
+          {connected ? (
             <div className="flex flex-col items-center gap-4">
               <div className="flex items-center gap-3 bg-white/10 backdrop-blur-md px-6 py-3 rounded-full text-white" data-testid="text-wallet-connected">
                 <Wallet className="h-5 w-5" />
@@ -65,15 +104,21 @@ export default function Landing() {
               </Button>
             </div>
           ) : (
-            <Button
-              size="lg"
-              onClick={connect}
-              className="h-14 px-8 font-heading text-base"
-              data-testid="button-wallet-connect"
-            >
-              <Wallet className="mr-2 h-5 w-5" />
-              Connect Phantom / Solflare
-            </Button>
+            <>
+              <Button
+                size="lg"
+                onClick={() => setShowWalletSelector(true)}
+                className="h-14 px-8 font-heading text-base"
+                data-testid="button-wallet-connect"
+              >
+                <Wallet className="mr-2 h-5 w-5" />
+                Connect Wallet
+              </Button>
+              <WalletSelector 
+                open={showWalletSelector} 
+                onOpenChange={setShowWalletSelector}
+              />
+            </>
           )}
         </div>
       </div>

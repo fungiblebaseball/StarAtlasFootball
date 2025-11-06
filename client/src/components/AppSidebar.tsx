@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Home, Users, Calendar, Trophy, ShoppingBag, Wallet, LogOut } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { useWallet } from "@/lib/wallet-context";
@@ -14,6 +15,7 @@ import {
   SidebarFooter,
 } from "@/components/ui/sidebar";
 import { Card } from "@/components/ui/card";
+import { WalletSelector } from "@/components/WalletSelector";
 
 const menuItems = [
   { title: "Dashboard", url: "/dashboard", icon: Home },
@@ -24,11 +26,17 @@ const menuItems = [
 ];
 
 export function AppSidebar() {
-  const [location] = useLocation();
+  const [location, setLocation] = useLocation();
   const { connected, walletAddress, disconnect, walletType } = useWallet();
+  const [showWalletSelector, setShowWalletSelector] = useState(false);
 
   const truncateAddress = (address: string) => {
     return `${address.slice(0, 6)}...${address.slice(-4)}`;
+  };
+
+  const handleDisconnect = () => {
+    disconnect();
+    setLocation("/");
   };
 
   return (
@@ -79,7 +87,7 @@ export function AppSidebar() {
             <Button
               variant="outline"
               size="sm"
-              onClick={disconnect}
+              onClick={handleDisconnect}
               className="w-full"
               data-testid="button-sidebar-disconnect"
             >
@@ -88,17 +96,27 @@ export function AppSidebar() {
             </Button>
           </>
         ) : (
-          <Card className="p-3">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
-                <Wallet className="h-5 w-5 text-muted-foreground" />
+          <>
+            <Card 
+              className="p-3 cursor-pointer hover-elevate" 
+              onClick={() => setShowWalletSelector(true)}
+              data-testid="card-connect-wallet"
+            >
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
+                  <Wallet className="h-5 w-5 text-muted-foreground" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium" data-testid="text-wallet">Not connected</div>
+                  <div className="text-xs text-muted-foreground">Connect wallet</div>
+                </div>
               </div>
-              <div className="flex-1 min-w-0">
-                <div className="text-sm font-medium" data-testid="text-wallet">Not connected</div>
-                <div className="text-xs text-muted-foreground">Connect wallet</div>
-              </div>
-            </div>
-          </Card>
+            </Card>
+            <WalletSelector 
+              open={showWalletSelector} 
+              onOpenChange={setShowWalletSelector}
+            />
+          </>
         )}
       </SidebarFooter>
     </Sidebar>
