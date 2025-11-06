@@ -15,9 +15,12 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Link } from "wouter"
 import { Save, Loader2, Filter } from "lucide-react"
+import { useWallet } from "@/lib/wallet-context"
+import { useQuery } from "@tanstack/react-query"
+import type { PlayerProfile } from "../../../shared/schema"
 
 interface ApiCrewMember {
-  _id: string
+  dasID: string
   mintOffset: number
   name: string
   imageUrl: string
@@ -47,6 +50,8 @@ interface Player {
     physicalStrength: number
     technicalSkill: number
     mentalResilience: number
+    total: number
+    average: number
   }
   rarity: string
   species: string
@@ -63,8 +68,17 @@ const convertApiToPlayer = (crew: ApiCrewMember, index: number): Player => {
   else if (aptitudes.includes("Engineering") || aptitudes.includes("Fitness")) position = "DEF"
   else if (aptitudes.includes("Medical")) position = "GK"
 
+  const playmakerCreativity = Math.round(crew.openness * 100)
+  const tacticalAwareness = Math.round(crew.conscientiousness * 100)
+  const physicalStrength = Math.round(crew.extraversion * 100)
+  const technicalSkill = Math.round(crew.agreeableness * 100)
+  const mentalResilience = Math.round((1 - crew.neuroticism) * 100)
+  
+  const total = playmakerCreativity + tacticalAwareness + physicalStrength + technicalSkill + mentalResilience
+  const average = Math.round(total / 5)
+
   return {
-    id: crew._id,
+    id: crew.dasID,
     name: crew.name,
     number: index + 1,
     position,
@@ -73,20 +87,23 @@ const convertApiToPlayer = (crew: ApiCrewMember, index: number): Player => {
     species: crew.species,
     faction: crew.faction,
     attributes: {
-      playmakerCreativity: Math.round(crew.openness * 100),
-      tacticalAwareness: Math.round(crew.conscientiousness * 100),
-      physicalStrength: Math.round(crew.extraversion * 100),
-      technicalSkill: Math.round(crew.agreeableness * 100),
-      mentalResilience: Math.round((1 - crew.neuroticism) * 100),
+      playmakerCreativity,
+      tacticalAwareness,
+      physicalStrength,
+      technicalSkill,
+      mentalResilience,
+      total,
+      average,
     },
   }
 }
 
 export default function RosterPage() {
+  const { walletAddress, connected } = useWallet()
   const [selectedPlayers, setSelectedPlayers] = useState<Player[]>([])
   const [availablePlayers, setAvailablePlayers] = useState<Player[]>([])
-  const [loading, setLoading] = useState(true)
   const [activeId, setActiveId] = useState<string | null>(null)
+  const [clickedPlayerId, setClickedPlayerId] = useState<string | null>(null)
 
   const [filterAttribute, setFilterAttribute] = useState<string>("all")
   const [filterPosition, setFilterPosition] = useState<string>("all")
@@ -100,37 +117,38 @@ export default function RosterPage() {
     }),
   )
 
+  // Fetch player profile
+  const { data: profile } = useQuery<PlayerProfile>({
+    queryKey: ["/api/profile", walletAddress],
+    enabled: !!walletAddress,
+  })
+
+  // Fetch crew from database (cached crew)
+  const { data: crewData, isLoading } = useQuery<{ total: number; crew: ApiCrewMember[] }>({
+    queryKey: ["/api/crew/cached"],
+    enabled: !!profile,
+  })
+
   useEffect(() => {
-    const fetchCrew = async () => {
-      try {
-        const response = await fetch(
-          "https://galaxy.staratlas.com/crew/inventory/B9JCkYPmqCeBzVGNq6jXqXnFqazrCTUSvD4Kd4HTTH3m",
-        )
-        const data = await response.json()
+    if (!crewData || !profile) return
 
-        const players = data.crew.map((crew: ApiCrewMember, index: number) => convertApiToPlayer(crew, index))
+    const players = crewData.crew.map((crew: ApiCrewMember, index: number) => convertApiToPlayer(crew, index))
 
-        // Load saved squad from localStorage or use first 15
-        const savedSquad = localStorage.getItem("selectedSquad")
-        if (savedSquad) {
-          const savedIds = JSON.parse(savedSquad).map((p: Player) => p.id)
-          const selected = players.filter((p: Player) => savedIds.includes(p.id))
-          const available = players.filter((p: Player) => !savedIds.includes(p.id))
-          setSelectedPlayers(selected)
-          setAvailablePlayers(available)
-        } else {
-          setSelectedPlayers(players.slice(0, 15))
-          setAvailablePlayers(players.slice(15))
-        }
-      } catch (error) {
-        console.error("[v0] Error fetching crew:", error)
-      } finally {
-        setLoading(false)
-      }
+    // Get selected crew IDs from profile
+    const selectedIds = (profile.selectedCrewIds as string[]) || []
+    
+    if (selectedIds.length > 0) {
+      // Use profile's selected crew
+      const selected = players.filter((p: Player) => selectedIds.includes(p.id))
+      const available = players.filter((p: Player) => !selectedIds.includes(p.id))
+      setSelectedPlayers(selected)
+      setAvailablePlayers(available)
+    } else {
+      // Fallback: use first 15
+      setSelectedPlayers(players.slice(0, 15))
+      setAvailablePlayers(players.slice(15))
     }
-
-    fetchCrew()
-  }, [])
+  }, [crewData, profile])
 
   const handleDragStart = (event: any) => {
     setActiveId(event.active.id)
@@ -275,9 +293,40 @@ export default function RosterPage() {
     }
   }
 
+  const handleCardClick = (playerId: string) => {
+    if (!clickedPlayerId) {
+      // First click: select this card
+      setClickedPlayerId(playerId)
+    } else if (clickedPlayerId === playerId) {
+      // Clicking same card: deselect
+      setClickedPlayerId(null)
+    } else {
+      // Second click: swap positions
+      const firstPlayer = selectedPlayers.find((p) => p.id === clickedPlayerId)
+      const secondPlayer = selectedPlayers.find((p) => p.id === playerId)
+
+      if (firstPlayer && secondPlayer) {
+        // Both in selected squad: swap
+        const firstIndex = selectedPlayers.findIndex((p) => p.id === clickedPlayerId)
+        const secondIndex = selectedPlayers.findIndex((p) => p.id === playerId)
+        const newSelected = [...selectedPlayers]
+        newSelected[firstIndex] = secondPlayer
+        newSelected[secondIndex] = firstPlayer
+        setSelectedPlayers(newSelected)
+      }
+      
+      setClickedPlayerId(null)
+    }
+  }
+
   const saveSquad = () => {
     localStorage.setItem("selectedSquad", JSON.stringify(selectedPlayers))
     alert("Squad saved successfully!")
+  }
+
+  const calculateCompartmentValue = (players: Player[]) => {
+    if (players.length === 0) return 0
+    return players.reduce((sum, p) => sum + p.attributes.average, 0)
   }
 
   const getFormationRows = () => {
@@ -285,53 +334,63 @@ export default function RosterPage() {
     let currentIndex = 0
 
     // Row 1: Goalkeeper (position 1)
+    const gkPlayers = selectedPlayers.slice(currentIndex, currentIndex + 1)
     rows.push({
       title: "Goalkeeper",
-      positions: selectedPlayers.slice(currentIndex, currentIndex + 1),
+      positions: gkPlayers,
       startIndex: currentIndex,
       count: 1,
+      value: calculateCompartmentValue(gkPlayers),
     })
     currentIndex += 1
 
     // Row 2: Defenders (positions 2-5)
+    const defPlayers = selectedPlayers.slice(currentIndex, currentIndex + 4)
     rows.push({
       title: "Defenders",
-      positions: selectedPlayers.slice(currentIndex, currentIndex + 4),
+      positions: defPlayers,
       startIndex: currentIndex,
       count: 4,
+      value: calculateCompartmentValue(defPlayers),
     })
     currentIndex += 4
 
     // Row 3: Midfielders (positions 6-9)
+    const midPlayers = selectedPlayers.slice(currentIndex, currentIndex + 4)
     rows.push({
       title: "Midfielders",
-      positions: selectedPlayers.slice(currentIndex, currentIndex + 4),
+      positions: midPlayers,
       startIndex: currentIndex,
       count: 4,
+      value: calculateCompartmentValue(midPlayers),
     })
     currentIndex += 4
 
     // Row 4: Attackers (positions 10-11)
+    const attPlayers = selectedPlayers.slice(currentIndex, currentIndex + 2)
     rows.push({
       title: "Attackers",
-      positions: selectedPlayers.slice(currentIndex, currentIndex + 2),
+      positions: attPlayers,
       startIndex: currentIndex,
       count: 2,
+      value: calculateCompartmentValue(attPlayers),
     })
     currentIndex += 2
 
     // Row 5: Reserves (positions 12-15)
+    const resPlayers = selectedPlayers.slice(currentIndex, currentIndex + 4)
     rows.push({
       title: "Reserves",
-      positions: selectedPlayers.slice(currentIndex, currentIndex + 4),
+      positions: resPlayers,
       startIndex: currentIndex,
       count: 4,
+      value: calculateCompartmentValue(resPlayers),
     })
 
     return rows
   }
 
-  if (loading) {
+  if (isLoading || !profile) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 flex items-center justify-center">
         <div className="text-center">
@@ -341,6 +400,8 @@ export default function RosterPage() {
       </div>
     )
   }
+  
+  const teamName = profile.profileName || profile.teamName || "My Team"
 
   const activePlayer = activeId
     ? selectedPlayers.find((p) => p.id === activeId) || availablePlayers.find((p) => p.id === activeId)
@@ -348,33 +409,47 @@ export default function RosterPage() {
 
   const formationRows = getFormationRows()
 
-  const filteredAvailablePlayers = availablePlayers.filter((player) => {
-    // Name search
-    if (searchName && !player.name.toLowerCase().includes(searchName.toLowerCase())) {
-      return false
-    }
+  // Filter and sort available players
+  const filteredAvailablePlayers = availablePlayers
+    .filter((player) => {
+      // Name search
+      if (searchName && !player.name.toLowerCase().includes(searchName.toLowerCase())) {
+        return false
+      }
 
-    // Position filter
-    if (filterPosition !== "all" && player.position !== filterPosition) {
-      return false
-    }
+      // Position filter
+      if (filterPosition !== "all" && player.position !== filterPosition) {
+        return false
+      }
 
-    // Attribute filter (show players with high values in selected attribute)
-    if (filterAttribute !== "all") {
-      const attrValue = player.attributes[filterAttribute as keyof Player["attributes"]]
-      if (attrValue < 70) return false // Only show players with 70+ in selected attribute
-    }
+      // Attribute filter (show players with high values in selected attribute)
+      if (filterAttribute !== "all") {
+        const attrValue = player.attributes[filterAttribute as keyof Player["attributes"]]
+        if (attrValue < 70) return false // Only show players with 70+ in selected attribute
+      }
 
-    return true
-  })
+      return true
+    })
+    .sort((a, b) => {
+      // Sort by selected attribute in descending order if one is selected
+      if (filterAttribute !== "all") {
+        const attrA = a.attributes[filterAttribute as keyof Player["attributes"]]
+        const attrB = b.attributes[filterAttribute as keyof Player["attributes"]]
+        return attrB - attrA // Higher values first
+      }
+      return 0 // Maintain original order if no attribute filter
+    })
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 p-8">
       <div className="max-w-7xl mx-auto">
         <div className="flex justify-between items-center mb-8">
           <div>
-            <h1 className="text-4xl font-bold text-white mb-2">Team Roster</h1>
+            <h1 className="text-4xl font-bold text-white mb-2">{teamName} - Roster</h1>
             <p className="text-blue-200">Select 15 players for your squad (11 starters + 4 reserves)</p>
+            {profile.profileName && (
+              <p className="text-sm text-blue-300 mt-1">Profile: {profile.profileName}</p>
+            )}
           </div>
           <div className="flex gap-4">
             <Button onClick={saveSquad} className="bg-green-600 hover:bg-green-700">
@@ -426,7 +501,12 @@ export default function RosterPage() {
             <div className="space-y-4">
               {formationRows.map((row, rowIndex) => (
                 <div key={rowIndex} className="bg-slate-800/50 rounded-lg p-3">
-                  <h3 className="text-sm font-semibold text-white mb-2">{row.title}</h3>
+                  <div className="flex justify-between items-center mb-2">
+                    <h3 className="text-sm font-semibold text-white">{row.title}</h3>
+                    <div className="text-sm font-bold text-yellow-400">
+                      Total: {Math.round(row.value)}
+                    </div>
+                  </div>
                   <SortableContext
                     items={row.positions.map((p) => p?.id || `slot-${row.startIndex}`)}
                     strategy={rectSortingStrategy}
@@ -450,12 +530,21 @@ export default function RosterPage() {
                         return (
                           <div key={slotId} className="relative">
                             {player ? (
-                              <CrewCard
-                                player={player}
-                                positionNumber={positionIndex + 1}
-                                isReserve={positionIndex >= 11}
-                                onRemove={() => removePlayer(player.id)}
-                              />
+                              <div 
+                                onClick={() => handleCardClick(player.id)}
+                                className={`cursor-pointer transition-all ${
+                                  clickedPlayerId === player.id 
+                                    ? 'ring-4 ring-yellow-400 ring-offset-2 ring-offset-slate-900 rounded-lg' 
+                                    : ''
+                                }`}
+                              >
+                                <CrewCard
+                                  player={player}
+                                  positionNumber={positionIndex + 1}
+                                  isReserve={positionIndex >= 11}
+                                  onRemove={() => removePlayer(player.id)}
+                                />
+                              </div>
                             ) : (
                               <div
                                 id={slotId}
@@ -513,6 +602,8 @@ export default function RosterPage() {
                   <SelectItem value="physicalStrength">High Physical Strength</SelectItem>
                   <SelectItem value="technicalSkill">High Technical Skill</SelectItem>
                   <SelectItem value="mentalResilience">High Mental Resilience</SelectItem>
+                  <SelectItem value="total">High Total Stats</SelectItem>
+                  <SelectItem value="average">High Average Stats</SelectItem>
                 </SelectContent>
               </Select>
               {(searchName || filterPosition !== "all" || filterAttribute !== "all") && (

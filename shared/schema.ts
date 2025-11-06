@@ -62,6 +62,7 @@ export const playerProfile = pgTable("player_profile", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   walletAddress: text("wallet_address").notNull(), // Solana wallet address that owns this profile
   playerProfilePubkey: text("player_profile_pubkey").unique(), // On-chain player profile public key
+  profileName: text("profile_name"), // Star Atlas profile name (e.g., "Galia Team Alpha")
   teamName: text("team_name"),
   formation: text("formation").default("442"),
   selectedCrewIds: jsonb("selected_crew_ids"), // Array of dasIDs (first 15 crew)

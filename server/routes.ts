@@ -376,6 +376,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
+      // Fetch profile name from blockchain service if available
+      let profileName: string | null = null;
+      if (playerProfilePubkey && isBlockchainServiceAvailable) {
+        try {
+          const profilesResponse = await fetchPlayerProfiles(walletAddress);
+          const matchingProfile = profilesResponse.profiles.find(p => p.pubkey === playerProfilePubkey);
+          if (matchingProfile?.name) {
+            profileName = matchingProfile.name;
+          }
+        } catch (error) {
+          console.warn("Failed to fetch profile name:", error);
+        }
+      }
+      
       // Get or create player profile
       let profile = await storage.getPlayerProfileByWallet(walletAddress);
       
@@ -387,10 +401,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // First sync: select first 15 crew as default team
         selectedCrewIds = crewDasIds.slice(0, Math.min(15, crewDasIds.length));
         
+        const teamName = profileName || "My Team";
+        
         profile = await storage.createPlayerProfile({
           walletAddress,
           playerProfilePubkey: playerProfilePubkey || null,
-          teamName: "My Team",
+          profileName: profileName,
+          teamName,
           formation: "442",
           selectedCrewIds: selectedCrewIds,
           atlasBalance: 1250,
@@ -430,12 +447,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
           console.log(`Replaced ${replacedCount} missing crew members with random reserves`);
         }
         
-        // Update profile
-        profile = await storage.updatePlayerProfile(profile.id, {
+        // Update profile - include profileName and teamName if we have a new one
+        const updateData: any = {
           playerProfilePubkey: playerProfilePubkey || profile.playerProfilePubkey,
           selectedCrewIds: selectedCrewIds,
           lastCrewSync: new Date().toISOString(),
-        });
+        };
+        
+        if (profileName) {
+          updateData.profileName = profileName;
+          // Also update teamName if it hasn't been customized
+          if (!profile.teamName || profile.teamName === "My Team") {
+            updateData.teamName = profileName;
+          }
+        }
+        
+        profile = await storage.updatePlayerProfile(profile.id, updateData);
       }
       
       res.json({

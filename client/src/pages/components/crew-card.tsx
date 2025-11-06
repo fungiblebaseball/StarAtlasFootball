@@ -13,6 +13,8 @@ interface PlayerAttributes {
   physicalStrength: number
   technicalSkill: number
   mentalResilience: number
+  total: number
+  average: number
 }
 
 interface Player {
@@ -166,6 +168,10 @@ export function CrewCard({
                     <div className="text-center">
                       <div className="text-gray-400">MNT</div>
                       <div className="text-white font-semibold">{player.attributes.mentalResilience}</div>
+                    </div>
+                    <div className="text-center px-1 border-l border-slate-600">
+                      <div className="text-gray-400">AVG</div>
+                      <div className="text-yellow-400 font-bold">{player.attributes.average}</div>
                     </div>
                   </div>
                 </div>
