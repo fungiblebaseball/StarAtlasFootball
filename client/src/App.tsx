@@ -14,6 +14,7 @@ import Roster from "@/pages/Roster";
 import Matches from "@/pages/Matches";
 import Rankings from "@/pages/Rankings";
 import Perks from "@/pages/Perks";
+import ProfileSelector from "@/pages/ProfileSelector";
 import NotFound from "@/pages/not-found";
 
 function AppLayout({ children }: { children: React.ReactNode }) {
@@ -44,6 +45,11 @@ function Router() {
   return (
     <Switch>
       <Route path="/" component={Landing} />
+      <Route path="/profile-selector">
+        <AppLayout>
+          <ProfileSelector />
+        </AppLayout>
+      </Route>
       <Route path="/dashboard">
         <AppLayout>
           <Dashboard />

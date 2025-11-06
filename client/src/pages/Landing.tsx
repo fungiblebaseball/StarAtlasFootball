@@ -10,10 +10,10 @@ export default function Landing() {
   const [, setLocation] = useLocation();
   const { connected, walletAddress, connecting, connect, disconnect, walletType } = useWallet();
 
-  // Redirect to dashboard when wallet is connected
+  // Redirect to profile selector when wallet is connected
   useEffect(() => {
     if (connected && walletAddress) {
-      setLocation("/dashboard");
+      setLocation("/profile-selector");
     }
   }, [connected, walletAddress, setLocation]);
 

@@ -141,6 +141,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get player profiles from blockchain
+  app.get("/api/blockchain/player-profiles", async (req, res) => {
+    try {
+      const walletAddress = req.query.walletAddress as string;
+      
+      if (!walletAddress) {
+        return res.status(400).json({ error: "Wallet address is required" });
+      }
+
+      // Check if blockchain service is available
+      const isAvailable = await checkBlockchainServiceHealth();
+      
+      if (!isAvailable) {
+        return res.status(503).json({ 
+          error: "Blockchain service unavailable",
+          message: "The blockchain service is currently not available. Please try again later or use default profile."
+        });
+      }
+
+      // Fetch player profiles from blockchain service
+      const profilesData = await fetchPlayerProfiles(walletAddress);
+      res.json(profilesData);
+    } catch (error) {
+      console.error("Error fetching player profiles:", error);
+      res.status(500).json({ 
+        error: "Failed to fetch player profiles",
+        message: error instanceof Error ? error.message : "Unknown error"
+      });
+    }
+  });
+
   // Get or create player profile by wallet address
   app.get("/api/profile", async (req, res) => {
     try {
