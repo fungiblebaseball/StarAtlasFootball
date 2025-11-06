@@ -60,10 +60,11 @@ export type Crew = typeof crew.$inferSelect;
 // Player Profile Configuration
 export const playerProfile = pgTable("player_profile", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  profileId: text("profile_id").notNull().unique(), // Star Atlas wallet address
+  walletAddress: text("wallet_address").notNull(), // Solana wallet address that owns this profile
+  playerProfilePubkey: text("player_profile_pubkey").unique(), // On-chain player profile public key
   teamName: text("team_name"),
   formation: text("formation").default("442"),
-  selectedCrewIds: jsonb("selected_crew_ids"), // Array of dasIDs
+  selectedCrewIds: jsonb("selected_crew_ids"), // Array of dasIDs (first 15 crew)
   wins: integer("wins").default(0),
   losses: integer("losses").default(0),
   draws: integer("draws").default(0),
@@ -71,6 +72,7 @@ export const playerProfile = pgTable("player_profile", {
   goalsAgainst: integer("goals_against").default(0),
   atlasBalance: integer("atlas_balance").default(0),
   ownedPerks: jsonb("owned_perks"), // Array of perk IDs
+  lastCrewSync: text("last_crew_sync"), // Timestamp of last crew sync from blockchain
   createdAt: text("created_at").default(sql`CURRENT_TIMESTAMP`),
   updatedAt: text("updated_at").default(sql`CURRENT_TIMESTAMP`),
 });

@@ -13,9 +13,11 @@ export interface IStorage {
   upsertCrew(crew: InsertCrew): Promise<Crew>;
   
   // Player Profile methods
-  getPlayerProfile(profileId: string): Promise<PlayerProfile | undefined>;
+  getPlayerProfileByWallet(walletAddress: string): Promise<PlayerProfile | undefined>;
+  getPlayerProfileByPubkey(playerProfilePubkey: string): Promise<PlayerProfile | undefined>;
+  getPlayerProfileById(id: string): Promise<PlayerProfile | undefined>;
   createPlayerProfile(profile: InsertPlayerProfile): Promise<PlayerProfile>;
-  updatePlayerProfile(profileId: string, updates: Partial<PlayerProfile>): Promise<PlayerProfile>;
+  updatePlayerProfile(id: string, updates: Partial<PlayerProfile>): Promise<PlayerProfile>;
 }
 
 export class MemStorage implements IStorage {
@@ -91,10 +93,20 @@ export class MemStorage implements IStorage {
   }
 
   // Player Profile methods
-  async getPlayerProfile(profileId: string): Promise<PlayerProfile | undefined> {
+  async getPlayerProfileByWallet(walletAddress: string): Promise<PlayerProfile | undefined> {
     return Array.from(this.profiles.values()).find(
-      (profile) => profile.profileId === profileId,
+      (profile) => profile.walletAddress === walletAddress,
     );
+  }
+
+  async getPlayerProfileByPubkey(playerProfilePubkey: string): Promise<PlayerProfile | undefined> {
+    return Array.from(this.profiles.values()).find(
+      (profile) => profile.playerProfilePubkey === playerProfilePubkey,
+    );
+  }
+
+  async getPlayerProfileById(id: string): Promise<PlayerProfile | undefined> {
+    return this.profiles.get(id);
   }
 
   async createPlayerProfile(insertProfile: InsertPlayerProfile): Promise<PlayerProfile> {
@@ -102,6 +114,8 @@ export class MemStorage implements IStorage {
     const now = new Date().toISOString();
     const profile: PlayerProfile = {
       id,
+      walletAddress: insertProfile.walletAddress,
+      playerProfilePubkey: insertProfile.playerProfilePubkey ?? null,
       teamName: insertProfile.teamName ?? null,
       formation: insertProfile.formation ?? "442",
       selectedCrewIds: insertProfile.selectedCrewIds ?? null,
@@ -112,18 +126,18 @@ export class MemStorage implements IStorage {
       goalsAgainst: insertProfile.goalsAgainst ?? 0,
       atlasBalance: insertProfile.atlasBalance ?? 0,
       ownedPerks: insertProfile.ownedPerks ?? null,
+      lastCrewSync: insertProfile.lastCrewSync ?? null,
       createdAt: now,
       updatedAt: now,
-      ...insertProfile,
     };
     this.profiles.set(id, profile);
     return profile;
   }
 
-  async updatePlayerProfile(profileId: string, updates: Partial<PlayerProfile>): Promise<PlayerProfile> {
-    const existing = await this.getPlayerProfile(profileId);
+  async updatePlayerProfile(id: string, updates: Partial<PlayerProfile>): Promise<PlayerProfile> {
+    const existing = await this.getPlayerProfileById(id);
     if (!existing) {
-      throw new Error(`Profile ${profileId} not found`);
+      throw new Error(`Profile ${id} not found`);
     }
     
     const updated: PlayerProfile = {
