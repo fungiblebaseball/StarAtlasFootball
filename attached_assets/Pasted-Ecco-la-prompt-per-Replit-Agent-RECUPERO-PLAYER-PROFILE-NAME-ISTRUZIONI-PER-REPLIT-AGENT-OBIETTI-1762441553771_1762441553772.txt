@@ -1,0 +1,298 @@
+Ecco la prompt per Replit Agent:
+
+RECUPERO PLAYER PROFILE NAME - ISTRUZIONI PER REPLIT AGENT
+OBIETTIVO
+Implementare la funzionalità per recuperare il nome del player profile Star Atlas dal wallet address dell'utente connesso.
+
+CONTESTO TECNICO
+Il Player Profile in Star Atlas utilizza un sistema a due account separati:
+
+Account Profile (principale): contiene chiavi, permessi, ruoli, timestamp
+Account PlayerName (secondario): contiene il nome leggibile del profilo
+
+Il nome NON è memorizzato direttamente nell'account Profile, ma in un PDA (Program Derived Address) separato chiamato PlayerName.
+
+ARCHITETTURA DELLA SOLUZIONE
+Program ID
+pprofELXjL5Kck7Jn5hCpwAL82DpTkSYBENzahVtbc9
+Flusso di recupero del nome:
+Wallet Address 
+    ↓
+[Star-Frame] → Lista Player Profiles associati al wallet
+    ↓
+Player Profile Pubkey
+    ↓
+[Deriva PDA] → PlayerName PDA usando seeds: ["player_name", profile_pubkey]
+    ↓
+[Fetch account] → Recupera dati account PlayerName
+    ↓
+Estrai campo "name" → Nome del profilo
+
+IMPLEMENTAZIONE NEL MICROSERVIZIO RUST
+1. Aggiungi dipendenze in blockchain-service/Cargo.toml:
+toml[dependencies]
+star-frame = { git = "https://github.com/staratlasmeta/star_frame.git" }
+solana-client = "1.18"
+solana-sdk = "1.18"
+anchor-client = "0.28"
+actix-web = "4"
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+2. Implementa funzione per derivare PlayerName PDA:
+rustuse solana_sdk::pubkey::Pubkey;
+use std::str::FromStr;
+
+const PLAYER_PROFILE_PROGRAM_ID: &str = "pprofELXjL5Kck7Jn5hCpwAL82DpTkSYBENzahVtbc9";
+
+fn derive_player_name_pda(profile_pubkey: &Pubkey) -> (Pubkey, u8) {
+    let program_id = Pubkey::from_str(PLAYER_PROFILE_PROGRAM_ID)
+        .expect("Invalid program ID");
+    
+    let seeds = &[
+        b"player_name",
+        profile_pubkey.as_ref()
+    ];
+    
+    Pubkey::find_program_address(seeds, &program_id)
+}
+3. Implementa funzione per recuperare il nome:
+rustuse solana_client::rpc_client::RpcClient;
+
+async fn get_player_profile_name(
+    rpc_client: &RpcClient,
+    profile_pubkey: &Pubkey
+) -> Result<String, Box<dyn std::error::Error>> {
+    
+    // Deriva il PDA del PlayerName
+    let (player_name_pda, _bump) = derive_player_name_pda(profile_pubkey);
+    
+    // Tenta di recuperare l'account
+    match rpc_client.get_account_data(&player_name_pda) {
+        Ok(account_data) => {
+            // Struttura account PlayerName:
+            // - 8 bytes: discriminator (Anchor)
+            // - 1 byte: version
+            // - 32 bytes: profile pubkey
+            // - 1 byte: bump
+            // - Resto: nome (stringa)
+            
+            let name_offset = 42; // 8 + 1 + 32 + 1
+            
+            if account_data.len() <= name_offset {
+                return Ok("Unnamed Profile".to_string());
+            }
+            
+            let name_bytes = &account_data[name_offset..];
+            
+            // Converti bytes in stringa, rimuovendo null terminators
+            let name = String::from_utf8_lossy(name_bytes)
+                .trim_end_matches('\0')
+                .trim()
+                .to_string();
+            
+            if name.is_empty() {
+                Ok("Unnamed Profile".to_string())
+            } else {
+                Ok(name)
+            }
+        },
+        Err(e) => {
+            // Account PlayerName non esiste o errore RPC
+            eprintln!("Error fetching PlayerName account: {}", e);
+            Ok("Unnamed Profile".to_string())
+        }
+    }
+}
+4. Aggiungi endpoint HTTP per recuperare profiles con nomi:
+rustuse actix_web::{get, web, HttpResponse, Responder};
+
+#[derive(Serialize)]
+struct PlayerProfileResponse {
+    pubkey: String,
+    name: String,
+}
+
+#[get("/api/profiles/{wallet_address}")]
+async fn get_player_profiles(
+    wallet_address: web::Path<String>
+) -> impl Responder {
+    
+    let rpc_client = RpcClient::new("https://api.mainnet-beta.solana.com".to_string());
+    
+    // Usa star-frame per ottenere lista player profiles dal wallet
+    // (implementa questa logica usando star-frame)
+    let profile_pubkeys = fetch_profiles_from_wallet(&wallet_address).await;
+    
+    let mut profiles = Vec::new();
+    
+    for profile_pubkey in profile_pubkeys {
+        match get_player_profile_name(&rpc_client, &profile_pubkey).await {
+            Ok(name) => {
+                profiles.push(PlayerProfileResponse {
+                    pubkey: profile_pubkey.to_string(),
+                    name,
+                });
+            },
+            Err(e) => {
+                eprintln!("Error getting name for profile {}: {}", profile_pubkey, e);
+                profiles.push(PlayerProfileResponse {
+                    pubkey: profile_pubkey.to_string(),
+                    name: "Unnamed Profile".to_string(),
+                });
+            }
+        }
+    }
+    
+    HttpResponse::Ok().json(profiles)
+}
+5. Aggiorna endpoint crew per includere nome:
+rust#[derive(Serialize)]
+struct CrewResponse {
+    profile_pubkey: String,
+    profile_name: String,
+    players: Vec<Player>,
+}
+
+#[get("/api/crew/{profile_pubkey}")]
+async fn get_crew(
+    profile_pubkey: web::Path<String>
+) -> impl Responder {
+    
+    let rpc_client = RpcClient::new("https://api.mainnet-beta.solana.com".to_string());
+    
+    let pubkey = match Pubkey::from_str(&profile_pubkey) {
+        Ok(pk) => pk,
+        Err(_) => return HttpResponse::BadRequest().json("Invalid pubkey"),
+    };
+    
+    // Recupera nome profilo
+    let profile_name = get_player_profile_name(&rpc_client, &pubkey)
+        .await
+        .unwrap_or_else(|_| "Unnamed Profile".to_string());
+    
+    // Usa star-frame per recuperare crew list
+    let players = fetch_crew_from_profile(&pubkey).await;
+    
+    HttpResponse::Ok().json(CrewResponse {
+        profile_pubkey: profile_pubkey.to_string(),
+        profile_name,
+        players,
+    })
+}
+
+INTEGRAZIONE LATO TYPESCRIPT
+Nel componente Login/Profile Selection:
+typescriptinterface PlayerProfile {
+  pubkey: string;
+  name: string;
+}
+
+async function fetchPlayerProfiles(walletAddress: string): Promise<PlayerProfile[]> {
+  try {
+    const response = await fetch(`http://localhost:3001/api/profiles/${walletAddress}`);
+    const profiles = await response.json();
+    return profiles;
+  } catch (error) {
+    console.error('Error fetching player profiles:', error);
+    return [];
+  }
+}
+
+// Nel componente UI dopo wallet connection:
+const profiles = await fetchPlayerProfiles(wallet.publicKey.toBase58());
+
+// Mostra dropdown o lista con i nomi:
+profiles.map(profile => (
+  <button onClick={() => selectProfile(profile.pubkey)}>
+    {profile.name} ({profile.pubkey.substring(0, 8)}...)
+  </button>
+))
+
+GESTIONE ERRORI E EDGE CASES
+Errori da gestire:
+
+Account PlayerName non esiste:
+
+Fallback: "Unnamed Profile"
+Non bloccare l'applicazione
+
+
+RPC timeout o errore rete:
+
+Retry con exponential backoff
+Mostra errore all'utente dopo 3 tentativi
+
+
+Profile senza nome impostato:
+
+Account esiste ma campo nome è vuoto
+Fallback: "Unnamed Profile"
+
+
+Formato dati corrotto:
+
+Validazione lunghezza account data
+Log errore dettagliato
+Fallback: "Unnamed Profile"
+
+
+
+Logging:
+rust// Aggiungi logging dettagliato per debug
+log::info!("Fetching name for profile: {}", profile_pubkey);
+log::debug!("PlayerName PDA: {}", player_name_pda);
+log::error!("Failed to fetch PlayerName: {}", error);
+
+TESTING
+Test il flusso completo:
+
+Test con profile con nome impostato:
+
+bash   curl http://localhost:3001/api/profiles/WALLET_ADDRESS_HERE
+Expected: [{"pubkey": "...", "name": "Commander42"}]
+
+Test con profile senza nome:
+Expected: [{"pubkey": "...", "name": "Unnamed Profile"}]
+Test con wallet senza profiles:
+Expected: []
+Test endpoint crew con nome:
+
+bash   curl http://localhost:3001/api/crew/PROFILE_PUBKEY_HERE
+Expected: {"profile_pubkey": "...", "profile_name": "...", "players": [...]}
+
+DOCUMENTAZIONE DI RIFERIMENTO
+
+Player Profile Program: https://build.staratlas.com/dev-resources/apis-and-data/player-profile
+Program ID: pprofELXjL5Kck7Jn5hCpwAL82DpTkSYBENzahVtbc9
+PDA Seeds: ["player_name", profile_pubkey]
+Account Structure:
+
+8 bytes: Anchor discriminator
+1 byte: version
+32 bytes: profile pubkey
+1 byte: bump
+Remaining bytes: name (UTF-8 string)
+
+
+
+
+PRIORITÀ IMPLEMENTAZIONE
+
+✅ Implementa derive_player_name_pda()
+✅ Implementa get_player_profile_name()
+✅ Aggiungi endpoint /api/profiles/{wallet}
+✅ Aggiorna endpoint /api/crew/{profile} per includere nome
+✅ Integra nel frontend TypeScript
+✅ Testing completo
+
+
+OBIETTIVO FINALE
+L'utente deve:
+
+Connettere il wallet
+Vedere una lista di nomi leggibili dei suoi player profiles
+Selezionare un profile dal nome (non dal pubkey criptico)
+L'app mostra sempre il nome del profile corrente nell'UI
+
+UX Target: "Commander42" invece di "ABC123def456..."
