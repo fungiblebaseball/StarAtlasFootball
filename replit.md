@@ -105,11 +105,11 @@ The application converts Star Atlas Big Five personality traits (0.0-1.0 scale) 
 - Session management
 
 **Rust Blockchain Microservice** (Port 3001):
-- Star Atlas blockchain integration using star-frame library
+- Star Atlas blockchain integration with Solana RPC
+- Player Profile Name retrieval from PlayerName PDA (Program Derived Address)
 - Solana on-chain data fetching
 - Player profile discovery
-- Crew inventory retrieval
-- Currently uses Star Atlas REST API as fallback for development
+- Crew inventory retrieval via Star Atlas Galaxy REST API
 
 **Service Communication**: HTTP-based requests from TypeScript server to Rust microservice with health checks and timeout handling.
 
@@ -119,6 +119,23 @@ The application converts Star Atlas Big Five personality traits (0.0-1.0 scale) 
 - Separate terminal execution for development
 
 ## Recent Changes
+
+### November 6, 2025 - Player Profile Name from Blockchain PDA
+- **Implemented**: Real Player Profile Name retrieval from Solana blockchain
+  - Uses PlayerName PDA (Program Derived Address) with seeds: `["player_name", profile_pubkey]`
+  - Program ID: `pprofELXjL5Kck7Jn5hCpwAL82DpTkSYBENzahVtbc9`
+  - Fetches actual profile names instead of hardcoded mocks
+  - Graceful fallback to "Unnamed Profile" when PlayerName account doesn't exist
+- **Enhanced**: Rust blockchain service with proper async/sync integration
+  - Uses `tokio::spawn_blocking` for synchronous RPC calls in async context
+  - Implements account data parsing (42-byte offset for name field)
+  - Handles UTF-8 conversion and null-terminator trimming
+- **Technical**: PlayerName account structure
+  - 8 bytes: Anchor discriminator
+  - 1 byte: version
+  - 32 bytes: profile pubkey
+  - 1 byte: bump seed
+  - Remaining bytes: UTF-8 encoded name string
 
 ### November 6, 2025 - Player Profile Loading Fix
 - **Fixed**: Blockchain service unavailability causing 503 errors on profile loading
@@ -201,5 +218,56 @@ The application converts Star Atlas Big Five personality traits (0.0-1.0 scale) 
 **Configurable Endpoints**:
 - Star Atlas API base URL: `https://galaxy.staratlas.com`
 - Blockchain service URL: `http://localhost:3001` (configurable via `BLOCKCHAIN_SERVICE_URL`)
+- Solana RPC URL: `https://api.mainnet-beta.solana.com` (used by Rust service)
 - Default formation: 442
 - Default ATLAS balance: 1,250
+
+## Testing Blockchain Service
+
+### Running the Rust Blockchain Service
+
+To test the Player Profile Name retrieval from blockchain:
+
+**Option 1: Start both services together**
+```bash
+bash start-both-services.sh
+```
+
+**Option 2: Start services separately**
+
+Terminal 1 (TypeScript server):
+```bash
+npm run dev
+```
+
+Terminal 2 (Rust blockchain service):
+```bash
+cd blockchain-service
+RUST_LOG=info cargo run
+```
+
+### Verifying Profile Name Retrieval
+
+1. **Check service health**:
+   ```bash
+   curl http://localhost:3001/health
+   ```
+   Expected: `{"status":"ok","service":"star-atlas-blockchain-service","version":"0.1.0"}`
+
+2. **Fetch profiles with real names**:
+   ```bash
+   curl "http://localhost:3001/api/profiles?wallet_address=YOUR_WALLET"
+   ```
+   Expected: Profile list with real names from PlayerName PDA
+
+3. **Verify in application**:
+   - Connect wallet in ProfileSelector
+   - Profile names should display real blockchain names instead of mock data
+   - Fallback to "Unnamed Profile" if PlayerName account doesn't exist
+
+### Troubleshooting
+
+- **Service not available**: Application falls back to TypeScript mock profiles automatically
+- **RPC timeout**: Check Solana network status and RPC endpoint availability
+- **Profile not found**: Ensure profile pubkey exists and has associated PlayerName account
+- **Compilation errors**: Run `cargo clean && cargo build` to rebuild dependencies
